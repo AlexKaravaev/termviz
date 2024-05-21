@@ -13,6 +13,7 @@ use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 use tui::{Frame, Viewport};
+use tui_tree_widget::{Tree, TreeItem, TreeState};
 
 #[derive(Clone)]
 struct SelectableTopics {
@@ -237,7 +238,7 @@ impl AppMode for TopicManager {
 impl<B: Backend> Drawable<B> for TopicManager {
     fn draw(&self, f: &mut Frame<B>) {
         let title_text = vec![Spans::from(Span::styled(
-            "Topic Manager",
+            "TF tree viewer",
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ))];
         let areas = Layout::default()
@@ -259,11 +260,10 @@ impl<B: Backend> Drawable<B> for TopicManager {
             .wrap(Wrap { trim: false });
 
         if !self.was_saved {
-            let left_chunks = Layout::default()
+            let layout = Layout::default()
                 .direction(Direction::Horizontal)
                 .margin(1)
-                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-                .split(areas[2]);
+                .constraints([Constraint::Percentage(100)].as_ref());
 
             let test = vec![vec!["Test", "Type"], vec!["Test2", "type"]];
             // Widget creation
@@ -276,37 +276,18 @@ impl<B: Backend> Drawable<B> for TopicManager {
                 .highlight_style(Style::default().add_modifier(Modifier::BOLD))
                 .block(
                     Block::default()
-                        .title("Available Topics")
+                        .title("Current tf frames")
                         .borders(Borders::ALL),
                 )
                 .highlight_symbol(">> ");
 
-            let selected_items: Vec<ListItem> = self
-                .frames
-                .iter()
-                .map(|i| ListItem::new(i[0].as_ref()))
-                .collect();
-            // The `List` widget is then built with those items.
-            let selected_list = List::new(selected_items)
-                .highlight_style(Style::default().add_modifier(Modifier::BOLD))
-                .block(
-                    Block::default()
-                        .title("Active Topics")
-                        .borders(Borders::ALL),
-                )
-                .highlight_symbol(">> ");
             // Finally the widget is rendered using the associated state. `events.state` is
             // effectively the only thing that we will "remember" from this draw call.
             f.render_widget(title, areas[0]);
             let mut state = ListState::default();
             f.render_stateful_widget(
                 list,
-                left_chunks[0],
-                &mut state,
-            );
-            f.render_stateful_widget(
-                selected_list,
-                left_chunks[1],
+                areas[2],
                 &mut state,
             );
         } else {

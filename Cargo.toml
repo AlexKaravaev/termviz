@@ -32,6 +32,7 @@ timer = "0.1.6"
 tokio = { version = "1.16", features = ["full"] }
 tui = "0.18.0"
 tui-image = { git = "https://github.com/arraypad/tui-image", version = "*" }
+tui-tree-widget = "0.19.0"
 
 [dependencies.confy]
 version = "0.5.0"
