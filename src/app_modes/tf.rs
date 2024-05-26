@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use std::collections::HashMap;
+use std::collections::HashSet;
 use crate::app_modes::viewport::{UseViewport, Viewport as AppViewport};
 use crate::app_modes::{input, AppMode, BaseMode, Drawable};
 use crate::config::Color as ConfigColor;
@@ -18,72 +20,72 @@ use tui_tree_widget::{Tree, TreeItem, TreeState};
 #[derive(Clone)]
 struct SelectableTopics {
     // `items` is the state managed by your application.
-    items: Vec<[String; 2]>,
+    items: Vec<TreeItem<'static, &'static str>>,
+    state: TreeState<&'static str>,
     // `state` is the state that can be modified by the UI. It stores the index of the selected
     // item as well as the offset computed during the previous draw call (used to implement
     // natural scrolling).
-    state: ListState,
 }
 
 impl SelectableTopics {
-    fn new(items: Vec<[String; 2]>) -> SelectableTopics {
+    fn new() -> SelectableTopics {
         SelectableTopics {
-            items,
-            state: ListState::default(),
+            items: vec![TreeItem::new_leaf("a", "Alfa")],
+            state: TreeState::default(),
         }
     }
 
     // Select the next item. This will not be reflected until the widget is drawn in the
     // `Terminal::draw` callback using `Frame::render_stateful_widget`.
-    pub fn next(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i >= self.items.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
-    }
+    // pub fn next(&mut self) {
+    //     let i = match self.state.selected() {
+    //         Some(i) => {
+    //             if i >= self.items.len() - 1 {
+    //                 0
+    //             } else {
+    //                 i + 1
+    //             }
+    //         }
+    //         None => 0,
+    //     };
+    //     self.state.select(Some(i));
+    // }
 
-    // Select the previous item. This will not be reflected until the widget is drawn in the
-    // `Terminal::draw` callback using `Frame::render_stateful_widget`.
-    pub fn previous(&mut self) {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.items.len() - 1
-                } else {
-                    i - 1
-                }
-            }
-            None => 0,
-        };
-        self.state.select(Some(i));
-    }
+    // // Select the previous item. This will not be reflected until the widget is drawn in the
+    // // `Terminal::draw` callback using `Frame::render_stateful_widget`.
+    // pub fn previous(&mut self) {
+    //     let i = match self.state.selected() {
+    //         Some(i) => {
+    //             if i == 0 {
+    //                 self.items.len() - 1
+    //             } else {
+    //                 i - 1
+    //             }
+    //         }
+    //         None => 0,
+    //     };
+    //     self.state.select(Some(i));
+    // }
 
-    pub fn add(&mut self, element: [String; 2]) {
-        self.items.push(element);
-    }
+    // pub fn add(&mut self, element: [String; 2]) {
+    //     self.items.push(element);
+    // }
 
-    // Default to 0 if none is selected, the handling of empty vectors should be
-    // handled by the caller
-    pub fn pop(&mut self) -> [String; 2] {
-        let i = match self.state.selected() {
-            Some(i) => {
-                if i > self.items.len() - 1 {
-                    self.items.len() - 1
-                } else {
-                    i
-                }
-            }
-            None => 0,
-        };
-        self.items.remove(i)
-    }
+    // // Default to 0 if none is selected, the handling of empty vectors should be
+    // // handled by the caller
+    // pub fn pop(&mut self) -> [String; 2] {
+    //     let i = match self.state.selected() {
+    //         Some(i) => {
+    //             if i > self.items.len() - 1 {
+    //                 self.items.len() - 1
+    //             } else {
+    //                 i
+    //             }
+    //         }
+    //         None => 0,
+    //     };
+    //     self.items.remove(i)
+    // }
 }
 
 pub struct TopicManager {
@@ -91,6 +93,7 @@ pub struct TopicManager {
     // The User can shift elements between available and selected topics.
     // topics can only be present in on of the lists.
     frames: Vec<Vec<String>>,
+    tf_frames: SelectableTopics,
     config: TermvizConfig,
     was_saved: bool,
     viewport: Rc<RefCell<AppViewport>>,
@@ -118,6 +121,7 @@ impl TopicManager {
                     String::from("Test2")
                 ]
             ],
+            tf_frames: SelectableTopics::new(),
             config: config,
             was_saved: false,
             viewport: viewport,
@@ -144,6 +148,21 @@ impl TopicManager {
     }
 }
 
+#[derive(Debug)]
+struct TreeNode {
+    name: String,
+    children: Vec<Box<TreeNode>>,
+}
+
+impl TreeNode {
+    fn new(name: &str) -> Self {
+        TreeNode {
+            name: name.to_string(),
+            children: Vec::new(),
+        }
+    }
+}
+
 impl<B: Backend> BaseMode<B> for TopicManager {}
 
 impl AppMode for TopicManager {
@@ -154,16 +173,37 @@ impl AppMode for TopicManager {
             .buffer
             .read()
             .unwrap()
-            .child_transform_index
+            .transform_data
             .clone()
         ;
-        
-        self.frames.clear();
-        for (parent, child) in buffered_tfs {
 
-            self.frames.push(vec![parent, child.iter().next().unwrap().clone()])
+        let mut tree: HashMap<String, TreeItem<'static, &'static str>> = HashMap::new();
+        let mut parent_map = self.viewport.borrow().tf_listener.buffer.read().unwrap().child_transform_index_no_cycle.clone();
+        self.frames.clear();
+        self.tf_frames.items.clear();
+
+        // Root nodes are nodes that are not anyone's children
+        let mut root_nodes: Vec<Vec<String>> = vec![];
+        let mut all_children: HashSet<String> = HashSet::new();
+
+        // Collect all children nodes
+        for children in parent_map.values() {
+            for child in children {
+                all_children.insert(child.clone());
+            }
         }
+
+        // Identify root nodes (nodes that are not in the set of all children)
+        for parent in parent_map.keys() {
+            if !all_children.contains(parent) {
+                root_nodes.push(vec![parent.to_string(), "test".to_string()]);
+            }
+        }
+
+        self.frames = root_nodes;
+
     }
+
     fn reset(&mut self) {}
     fn get_description(&self) -> Vec<String> {
         vec!["Topic manager can enable and disable displayed topics".to_string()]
