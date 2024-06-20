@@ -20,6 +20,7 @@ futures = "0.3"
 futures-timer = "3.0"
 image = "0.24"  # TODO: tui-image (see below) doesn't allow newer versions.
 nalgebra = ">=0.29.0"
+ratatui = "0.26"
 rand = "0.8.5"
 rosrust = "0.9.11"
 rosrust_msg = "0.1.7"

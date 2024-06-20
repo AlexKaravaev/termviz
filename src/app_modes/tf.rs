@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-
+use ratatui::text::Text;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use crate::app_modes::viewport::{UseViewport, Viewport as AppViewport};
@@ -13,14 +13,14 @@ use tui::backend::Backend;
 use tui::layout::{Alignment, Constraint, Direction, Layout};
 use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
-use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Scrollbar, ScrollbarOrientation};
 use tui::{Frame, Viewport};
 use tui_tree_widget::{Tree, TreeItem, TreeState};
 
 #[derive(Clone)]
 struct SelectableTopics {
     // `items` is the state managed by your application.
-    items: Vec<TreeItem<'static, &'static str>>,
+    items: Vec<TreeItem<'static, String>>,
     state: TreeState<&'static str>,
     // `state` is the state that can be modified by the UI. It stores the index of the selected
     // item as well as the offset computed during the previous draw call (used to implement
@@ -30,7 +30,7 @@ struct SelectableTopics {
 impl SelectableTopics {
     fn new() -> SelectableTopics {
         SelectableTopics {
-            items: vec![TreeItem::new_leaf("a", "Alfa")],
+            items: vec![TreeItem::new_leaf("a".to_string(), "Alfa".to_string())],
             state: TreeState::default(),
         }
     }
@@ -177,7 +177,7 @@ impl AppMode for TopicManager {
             .clone()
         ;
 
-        let mut tree: HashMap<String, TreeItem<'static, &'static str>> = HashMap::new();
+        let mut tree: HashMap<String, TreeItem<String>> = HashMap::new();
         let mut parent_map = self.viewport.borrow().tf_listener.buffer.read().unwrap().child_transform_index_no_cycle.clone();
         self.frames.clear();
         self.tf_frames.items.clear();
@@ -199,6 +199,18 @@ impl AppMode for TopicManager {
                 root_nodes.push(vec![parent.to_string(), "test".to_string()]);
             }
         }
+        self.tf_frames.items = vec![
+            {
+                let string1 = root_nodes[0][0].to_string();
+                let text1 = Text::from(string1.clone());
+                TreeItem::new_leaf(String::from(&string1),string1.clone())
+            },
+            {
+                let string2 = root_nodes[1][0].to_string();
+                let text2 = Text::from(string2.clone());
+                TreeItem::new_leaf(String::from(&string2),string2.clone())
+            },
+        ];
 
         self.frames = root_nodes;
 
@@ -305,14 +317,9 @@ impl<B: Backend> Drawable<B> for TopicManager {
                 .margin(1)
                 .constraints([Constraint::Percentage(100)].as_ref());
 
-            let test = vec![vec!["Test", "Type"], vec!["Test2", "type"]];
-            // Widget creation
-            let items: Vec<ListItem> = self.frames
-                .iter()
-                .map(|i| ListItem::new(format!("{} : {}", i[0], i[1])))
-                .collect();
             // The `List` widget is then built with those items.
-            let list = List::new(items)
+            let list = Tree::new(&self.tf_frames.items)
+                .expect("all item identifiers are unique")
                 .highlight_style(Style::default().add_modifier(Modifier::BOLD))
                 .block(
                     Block::default()
@@ -324,7 +331,7 @@ impl<B: Backend> Drawable<B> for TopicManager {
             // Finally the widget is rendered using the associated state. `events.state` is
             // effectively the only thing that we will "remember" from this draw call.
             f.render_widget(title, areas[0]);
-            let mut state = ListState::default();
+            let mut state = self.tf_frames.state;
             f.render_stateful_widget(
                 list,
                 areas[2],
